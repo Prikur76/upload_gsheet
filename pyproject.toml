@@ -1,0 +1,63 @@
+# Приложение: запуск через python -m upload_gsheet или uv run upload-gsheet.
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/upload_gsheet"]
+
+[project]
+name = "upload-gsheet"
+version = "0.2.0"
+description = "Периодическая загрузка данных из 1С:Элемент в Google Таблицы (водители, автопарк, кураторы)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["google-sheets", "1c", "element", "polars", "etl"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "environs>=10.0.0",
+    "google-auth>=2.33.0",
+    "google-api-python-client>=2.140.0",
+    "google-auth-httplib2>=0.2.0",
+    "httpx>=0.27.0",
+    "polars>=1.0.0",
+    "pytz",
+    "requests>=2.31.0",
+    "tenacity>=8.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8.0",
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+upload-gsheet = "upload_gsheet.run:main"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 79
+src = ["src"]
+exclude = [".git", ".venv", "__pycache__", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "ARG", "SIM"]
+ignore = ["E501", "B008", "B904"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["upload_gsheet"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
