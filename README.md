@@ -7,17 +7,20 @@
 
 ## Требования
 
-- Python 3.10+
+- Python 3.11+
 - [uv](https://docs.astral.sh/uv/) (рекомендуется) или pip
 
 ## Установка
 
+С uv (рекомендуется): в проекте указан Python 3.11 в `.python-version`. При первом запуске uv при необходимости скачает нужную версию:
+
 ```bash
-# Создать виртуальное окружение и установить зависимости
 uv sync
 ```
 
-Либо без uv:
+Если 3.11 ещё нет, установите его: `uv python install 3.11`, затем снова `uv sync`.
+
+Без uv:
 
 ```bash
 pip install -e .
@@ -55,11 +58,11 @@ upload-gsheet
 
 ### 1. Подготовка системы
 
-Установите Python 3.10 или новее (если ещё не установлен):
+Установите Python 3.11 или новее. С uv достаточно установить Python через uv (uv скачает нужную версию). Либо системно:
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-venv python3-pip
+sudo apt install -y python3.11 python3.11-venv python3.11-dev python3-pip
 ```
 
 Опционально — [uv](https://docs.astral.sh/uv/install/) для быстрой установки зависимостей:

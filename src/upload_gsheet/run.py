@@ -2,6 +2,14 @@
 
 import logging
 import sys
+import warnings
+
+# Убрать FutureWarning о поддержке Python 3.10 в google.api_core (до перехода на 3.11+)
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    module="google.api_core._python_version_support",
+)
 
 from upload_gsheet.jobs.drivers_and_cars import run_drivers_and_cars_safe
 from upload_gsheet.jobs.supervisers import run_supervisers_safe
