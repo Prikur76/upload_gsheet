@@ -90,19 +90,19 @@ _ROSTER_COLUMNS = [
     "LicenseValidityDate",
     "StatusDetail",
     "Status",
-    "SubStatus",
-    "StatusFix",
-    "SubStatusFix",
+    "SubStatus",    
     "Reason",
     "Comment",
     "FormattedCommentCar",
     "CarLocation",
     "Department",
     "Region",
-    "RegionFix",
     "DriverInfo",
     "DatePL",
-    "DateUpload",
+    "DateUpload",    
+    "RegionFix",     # НА УДАЛЕНИЕ?
+    "StatusFix",     # НА УДАЛЕНИЕ?
+    "SubStatusFix",  # НА УДАЛЕНИЕ?
 ]
 
 
@@ -225,6 +225,7 @@ def _add_roster_computed_columns(df: pl.DataFrame) -> pl.DataFrame:
         .otherwise(pl.lit("500+"))
         .alias("MileageGroup")
     )
+    # НА УДАЛЕНИЕ?
     region_fix = (
         pl.when(
             (pl.col("Region") == "Ярославль")
@@ -234,12 +235,14 @@ def _add_roster_computed_columns(df: pl.DataFrame) -> pl.DataFrame:
         .otherwise(pl.col("Region").fill_null(""))
         .alias("RegionFix")
     )
+    # НА УДАЛЕНИЕ?
     status_fix = (
         pl.when(pl.col("Status") == "ДТП")
         .then(pl.lit("ТР"))
         .otherwise(pl.col("Status").fill_null(""))
         .alias("StatusFix")
     )
+    # НА УДАЛЕНИЕ?
     substatus_fix = (
         pl.when(pl.col("Status") == "ДТП")
         .then(pl.lit("ДТП"))
@@ -247,7 +250,12 @@ def _add_roster_computed_columns(df: pl.DataFrame) -> pl.DataFrame:
         .alias("SubStatusFix")
     )
     return df.with_columns(
-        [mileage_group, region_fix, status_fix, substatus_fix]
+        [
+            mileage_group,
+            region_fix,      # НА УДАЛЕНИЕ?
+            status_fix,      # НА УДАЛЕНИЕ?
+            substatus_fix    # НА УДАЛЕНИЕ?
+        ]
     )
 
 
