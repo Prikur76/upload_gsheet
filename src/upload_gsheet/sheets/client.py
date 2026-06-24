@@ -8,7 +8,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from tenacity import (
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -36,13 +36,20 @@ def _get_service():
     return _service
 
 
+def _should_retry(exc: BaseException) -> bool:
+    """Сетевые ошибки и временные ошибки Google API (5xx, 409)."""
+    if isinstance(exc, (socket.timeout, OSError)):
+        return True
+    if isinstance(exc, HttpError) and exc.resp is not None:
+        return exc.resp.status in (409, 500, 502, 503)
+    return False
+
+
 class SheetsClient:
     """Клиент для записи и чтения Google Таблиц."""
 
     @retry(
-        retry=retry_if_exception_type(
-            (socket.timeout, OSError)
-        ),
+        retry=retry_if_exception(_should_retry),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=30),
     )
@@ -65,9 +72,7 @@ class SheetsClient:
         return response
 
     @retry(
-        retry=retry_if_exception_type(
-            (socket.timeout, OSError)
-        ),
+        retry=retry_if_exception(_should_retry),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=30),
     )
