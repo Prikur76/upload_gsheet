@@ -6,10 +6,14 @@ from typing import Any
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from upload_gsheet.config import GOOGLE_CREDENTIALS_PATH
-
-socket.setdefaulttimeout(150)
 
 _SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 _service: Any = None
@@ -35,6 +39,13 @@ def _get_service():
 class SheetsClient:
     """Клиент для записи и чтения Google Таблиц."""
 
+    @retry(
+        retry=retry_if_exception_type(
+            (socket.timeout, OSError)
+        ),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+    )
     def batch_update_values(
         self, spreadsheet_id: str, sheet_range: str, data: list
     ) -> dict:
@@ -53,6 +64,13 @@ class SheetsClient:
             raise HttpError(resp=None, content=b"")
         return response
 
+    @retry(
+        retry=retry_if_exception_type(
+            (socket.timeout, OSError)
+        ),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+    )
     def clear_range(self, spreadsheet_id: str, sheet_range: str) -> dict:
         """Очищает диапазон."""
         body = {"ranges": [sheet_range]}
