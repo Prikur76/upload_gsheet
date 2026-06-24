@@ -29,3 +29,7 @@ def setup_logging(level: int = logging.INFO) -> None:
     file_handler.setLevel(logging.WARNING)
     file_handler.setFormatter(formatter)
     root.addHandler(file_handler)
+
+    # Не засорять логи отладочными сообщениями сторонних библиотек
+    for lib in ("httpx", "httpcore", "urllib3", "googleapiclient"):
+        logging.getLogger(lib).setLevel(logging.WARNING)
