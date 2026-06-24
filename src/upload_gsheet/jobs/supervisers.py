@@ -3,8 +3,8 @@
 import logging
 from datetime import datetime
 
-import httpx
 import polars as pl
+import requests
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -49,22 +49,21 @@ _REQUIRED_COLUMNS = [
 @retry(
     retry=retry_if_exception_type(
         (
-            httpx.ConnectError,
-            httpx.TimeoutException,
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
         )
     ),
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=30),
 )
 def _fetch_drivers_json() -> list:
-    with httpx.Client(timeout=20) as client:
-        resp = client.get(
-            DRIVERS_URL,
-            auth=(USER, PASSWORD),
-            headers={"Content-Type": "application/json"},
-        )
-        resp.raise_for_status()
-        return resp.json()
+    resp = requests.get(
+        DRIVERS_URL,
+        auth=(USER, PASSWORD),
+        timeout=(10, 60),
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 def run_supervisers(client: SheetsClient | None = None) -> None:
@@ -76,7 +75,7 @@ def run_supervisers(client: SheetsClient | None = None) -> None:
         return
     sheets = client or SheetsClient()
     data = _fetch_drivers_json()
-    df = pl.DataFrame(data)
+    df = pl.DataFrame(data, infer_schema_length=None)
     df = df.rename(_RENAME)
     df = df.filter(
         (pl.col("Куратор") != "")

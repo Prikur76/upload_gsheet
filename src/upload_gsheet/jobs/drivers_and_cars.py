@@ -8,6 +8,7 @@ import polars as pl
 import pytz
 import requests
 from googleapiclient.errors import HttpError
+from tenacity import RetryError
 
 from upload_gsheet.api.element import ElementClient
 from upload_gsheet.config import (
@@ -90,7 +91,7 @@ _ROSTER_COLUMNS = [
     "LicenseValidityDate",
     "StatusDetail",
     "Status",
-    "SubStatus",    
+    "SubStatus",
     "Reason",
     "Comment",
     "FormattedCommentCar",
@@ -99,7 +100,7 @@ _ROSTER_COLUMNS = [
     "Region",
     "DriverInfo",
     "DatePL",
-    "DateUpload",    
+    "DateUpload",
     "RegionFix",     # НА УДАЛЕНИЕ?
     "StatusFix",     # НА УДАЛЕНИЕ?
     "SubStatusFix",  # НА УДАЛЕНИЕ?
@@ -148,6 +149,21 @@ def _add_driver_formatted_columns(df: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+_FORMATTER_COLS = {
+    "STSDetail": ["STSSeriesNumber", "STSIssueDate"],
+    "OSAGODetail": ["OSAGOSeriesNumber", "OSAGOIssueDate"],
+    "TODetail": ["TOSeriesNumber", "TOIssueDate"],
+    "LicenseDetail": ["LicenseSeriesNumber", "LicenseIssueDate"],
+    "CarInfo": [
+        "Model", "YearCar", "VIN", "Number",
+        "EngineCapacity", "Transmission", "GBO",
+    ],
+    "StatusDetail": ["Status", "Reason"],
+    "FormattedCommentCar": ["CommentCar"],
+    "CarLocation": ["CommentCar"],
+}
+
+
 def _add_car_formatted_columns(df: pl.DataFrame) -> pl.DataFrame:
     """Добавляет все производные колонки для машин."""
     df = df.with_columns(
@@ -183,7 +199,6 @@ def _add_car_formatted_columns(df: pl.DataFrame) -> pl.DataFrame:
         .otherwise(pl.lit(""))
         .alias("OSAGOSeriesNumber"),
     )
-    all_cols = df.columns
     for name, fn in [
         ("STSDetail", fmt.format_sts_detail),
         ("OSAGODetail", fmt.format_osago_detail),
@@ -194,15 +209,15 @@ def _add_car_formatted_columns(df: pl.DataFrame) -> pl.DataFrame:
         ("FormattedCommentCar", fmt.format_comment_car),
         ("CarLocation", fmt.get_car_location),
     ]:
+        needed = _FORMATTER_COLS[name]
         df = df.with_columns(
-            pl.struct(all_cols)
+            pl.struct(needed)
             .map_elements(
                 lambda s, _fn=fn: _fn(_row_to_dict(s)),
                 return_dtype=pl.Utf8,
             )
             .alias(name),
         )
-        all_cols = df.columns
     return df
 
 
@@ -349,6 +364,10 @@ def run_drivers_and_cars_safe() -> bool:
     except HttpError as e:
         logger.error("Ошибка Google Sheets: %s", e)
         return False
+    except RetryError as e:
+        orig = e.__cause__ or e
+        logger.error("Ошибка после повторных попыток: %s", orig)
+        return False
     except requests.exceptions.HTTPError as e:
         logger.error("Ошибка HTTP: %s", e)
         return False
@@ -360,4 +379,7 @@ def run_drivers_and_cars_safe() -> bool:
         return False
     except requests.exceptions.ConnectionError as e:
         logger.error("Ошибка соединения: %s", e)
+        return False
+    except Exception as e:
+        logger.error("Неожиданная ошибка: %s", e)
         return False

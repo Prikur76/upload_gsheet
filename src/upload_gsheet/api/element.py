@@ -28,7 +28,9 @@ from upload_gsheet.formatters.drivers_cars import (
     wait=wait_exponential(multiplier=1, min=2, max=30),
 )
 def _post_json(url: str, auth: tuple[str, str], json: dict) -> list:
-    with requests.post(url=url, auth=auth, json=json, stream=True) as resp:
+    with requests.post(
+        url=url, auth=auth, json=json, stream=True, timeout=(10, 60)
+    ) as resp:
         resp.raise_for_status()
         return resp.json()
 
@@ -47,7 +49,11 @@ def _get_json(
     url: str, auth: tuple[str, str], params: dict | None = None
 ) -> list:
     with requests.get(
-        url=url, params=params or {}, auth=auth, stream=True
+        url=url,
+        params=params or {},
+        auth=auth,
+        stream=True,
+        timeout=(10, 60),
     ) as resp:
         resp.raise_for_status()
         return resp.json()
