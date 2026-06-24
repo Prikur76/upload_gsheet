@@ -163,15 +163,26 @@ mkdir -p /opt/upload_gsheet/logs
 
 Логи самого приложения (ошибки и т.п.) пишутся в файл, заданный в `.env` (`LOG_DIR`/`LOG_FILE`).
 
+### 7. Ротация логов
+
+Установите logrotate, чтобы логи cron и ошибок не занимали всё место на диске:
+
+```bash
+sudo cp /opt/upload_gsheet/deploy/logrotate.conf /etc/logrotate.d/upload-gsheet
+```
+
+Конфиг выполняет ежедневную ротацию, хранит 7 последних файлов, сжимает старые и принудительно ротирует файлы крупнее 10 МБ.
+
 ## Структура проекта
 
 - `src/upload_gsheet/` — пакет приложения
   - `config.py` — конфигурация из `.env`
-  - `api/element.py` — клиент 1С:Элемент (Polars)
+  - `api/element.py` — клиент 1С:Элемент (Polars, retry)
   - `sheets/client.py` — клиент Google Sheets
   - `formatters/` — форматирование строк
   - `jobs/` — сценарии выгрузки (водители+автопарк, кураторы)
   - `run.py` — точка входа
+- `deploy/logrotate.conf` — конфиг ротации логов для сервера
 
 ## Публикация на GitHub
 

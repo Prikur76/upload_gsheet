@@ -153,3 +153,8 @@ creds.json
 *.json.bak
 logs/
 errors.log
+
+.gigacode/
+
+# --AI AGENTS--
+.claude/
