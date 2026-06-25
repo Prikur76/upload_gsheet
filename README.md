@@ -54,6 +54,14 @@ upload-gsheet
 
 Для периодического запуска на сервере настройте планировщик (cron, systemd timer, Task Scheduler) с нужным интервалом. При ошибке основной выгрузки процесс завершается с кодом 1.
 
+Проверка доступности API 1С (без выгрузки в Google Таблицы):
+
+```bash
+uv run python -m upload_gsheet.healthcheck
+```
+
+Код выхода: `0` — API отвечает, `1` — недоступен.
+
 ## Развёртывание и запуск на сервере Ubuntu
 
 ### 1. Подготовка системы
@@ -143,16 +151,19 @@ python -m upload_gsheet
 crontab -u deploy -e
 ```
 
-Добавьте строку (путь и интервал при необходимости измените):
+Рекомендуемые строки (путь и интервал при необходимости измените). Готовый фрагмент — в `deploy/crontab.snippet`:
 
 ```cron
-*/5 * * * * cd /opt/upload_gsheet && /opt/upload_gsheet/.venv/bin/python -m upload_gsheet >> /opt/upload_gsheet/logs/cron.log 2>&1
+*/5 * * * * flock -n /tmp/upload_gsheet.lock -c 'cd /opt/upload_gsheet && /opt/upload_gsheet/.venv/bin/python -m upload_gsheet' >> /opt/upload_gsheet/logs/cron.log 2>&1
+*/1 * * * * flock -n /tmp/upload_gsheet_1c_health.lock -c 'cd /opt/upload_gsheet && /opt/upload_gsheet/.venv/bin/python -m upload_gsheet.healthcheck'
 ```
+
+`flock` не даёт запустить новый проход выгрузки, пока предыдущий ещё выполняется (защита от наложения cron-задач и OOM).
 
 Если используете uv без установки пакета в venv:
 
 ```cron
-*/5 * * * * cd /opt/upload_gsheet && /home/deploy/.local/bin/uv run python -m upload_gsheet >> /opt/upload_gsheet/logs/cron.log 2>&1
+*/5 * * * * flock -n /tmp/upload_gsheet.lock -c 'cd /opt/upload_gsheet && /home/deploy/.local/bin/uv run python -m upload_gsheet' >> /opt/upload_gsheet/logs/cron.log 2>&1
 ```
 
 Каталог для логов создайте заранее:
@@ -161,9 +172,47 @@ crontab -u deploy -e
 mkdir -p /opt/upload_gsheet/logs
 ```
 
-Логи самого приложения (ошибки и т.п.) пишутся в файл, заданный в `.env` (`LOG_DIR`/`LOG_FILE`).
+Логи самого приложения (ошибки выгрузки) пишутся в файл, заданный в `.env` (`LOG_DIR`/`LOG_FILE`, по умолчанию `logs/errors.log`). Журнал cron — `logs/cron.log`.
 
-### 7. Ротация логов
+### 7. Мониторинг доступности 1С
+
+Модуль `upload_gsheet.healthcheck` проверяет, отвечает ли API 1С:Элемент, не затрагивая Google Таблицы.
+
+**Что проверяется**
+
+1. TCP-соединение с хостом и портом из `ELEMENT_DRIVERS_URL`
+2. `POST`-запрос к API водителей с телом `{"Status": ["Работает"]}` (как в основной выгрузке)
+
+Таймауты: подключение 5 с, чтение ответа 15 с.
+
+**Ручной запуск**
+
+```bash
+cd /opt/upload_gsheet
+.venv/bin/python -m upload_gsheet.healthcheck
+echo $?
+```
+
+**Логи и состояние**
+
+| Файл | Назначение |
+|------|------------|
+| `logs/health_1c.log` | каждая проверка (`OK` / `FAIL`) |
+| `logs/errors.log` | только смена состояния: «1С API недоступна» / «1С API восстановлена» |
+| `logs/1c_health.state` | текущее состояние: `ok` или `fail` |
+
+При повторных сбоях без восстановления запись в `errors.log` не дублируется — алерт пишется один раз при переходе `ok → fail` и один раз при `fail → ok`.
+
+**Cron**
+
+Вторая строка в `deploy/crontab.snippet` запускает проверку каждую минуту. Для мониторинга достаточно смотреть хвост `health_1c.log` или искать алерты в `errors.log`:
+
+```bash
+tail -f /opt/upload_gsheet/logs/health_1c.log
+grep '1С API' /opt/upload_gsheet/logs/errors.log
+```
+
+### 8. Ротация логов
 
 Установите logrotate, чтобы логи cron и ошибок не занимали всё место на диске:
 
@@ -181,7 +230,9 @@ sudo cp /opt/upload_gsheet/deploy/logrotate.conf /etc/logrotate.d/upload-gsheet
   - `sheets/client.py` — клиент Google Sheets
   - `formatters/` — форматирование строк
   - `jobs/` — сценарии выгрузки (водители+автопарк, кураторы)
+  - `healthcheck.py` — проверка доступности API 1С
   - `run.py` — точка входа
+- `deploy/crontab.snippet` — пример строк cron (выгрузка + healthcheck)
 - `deploy/logrotate.conf` — конфиг ротации логов для сервера
 
 ## Публикация на GitHub

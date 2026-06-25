@@ -1,0 +1,10 @@
+# Фрагмент для crontab (root или deploy).
+# Установка: crontab -e и вставить строки ниже.
+#
+# flock — не запускать новый проход, пока предыдущий не завершён.
+# healthcheck — раз в минуту, лог: logs/health_1c.log;
+#   смена состояния пишется в logs/errors.log.
+
+*/5 * * * * flock -n /tmp/upload_gsheet.lock -c 'cd /opt/upload_gsheet && /opt/upload_gsheet/.venv/bin/python -m upload_gsheet' >> /opt/upload_gsheet/logs/cron.log 2>&1
+
+*/1 * * * * flock -n /tmp/upload_gsheet_1c_health.lock -c 'cd /opt/upload_gsheet && /opt/upload_gsheet/.venv/bin/python -m upload_gsheet.healthcheck'
