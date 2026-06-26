@@ -6,14 +6,23 @@ from datetime import datetime
 import polars as pl
 import requests
 from tenacity import (
+    RetryError,
     retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
 
+from upload_gsheet.api.element import get_1c_session
+from upload_gsheet.api.element_log import (
+    log_1c_request_error,
+    log_last_request_error,
+    set_request_context,
+)
 from upload_gsheet.config import (
     DRIVERS_URL,
+    ELEMENT_CONNECT_TIMEOUT,
+    ELEMENT_READ_TIMEOUT,
     PASSWORD,
     SUPERVISERS_RANGE,
     SUPERVISERS_SPREADSHEET_ID,
@@ -57,13 +66,21 @@ _REQUIRED_COLUMNS = [
     wait=wait_exponential(multiplier=1, min=2, max=30),
 )
 def _fetch_drivers_json() -> list:
-    resp = requests.get(
-        DRIVERS_URL,
-        auth=(USER, PASSWORD),
-        timeout=(10, 60),
-    )
-    resp.raise_for_status()
-    return resp.json()
+    timeout = (ELEMENT_CONNECT_TIMEOUT, ELEMENT_READ_TIMEOUT)
+    set_request_context("GET", DRIVERS_URL, user=USER, timeout=timeout)
+    try:
+        resp = get_1c_session().get(
+            DRIVERS_URL,
+            auth=(USER, PASSWORD),
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.HTTPError as exc:
+        log_1c_request_error(
+            logger, exc, "GET", DRIVERS_URL, user=USER, timeout=timeout
+        )
+        raise
 
 
 def run_supervisers(client: SheetsClient | None = None) -> None:
@@ -109,6 +126,12 @@ def run_supervisers_safe(client: SheetsClient | None = None) -> bool:
     try:
         run_supervisers(client)
         return True
+    except RetryError as e:
+        exc = e.last_attempt.exception() if e.last_attempt else e
+        log_last_request_error(logger, exc)
+        return False
+    except requests.exceptions.HTTPError:
+        return False
     except Exception as e:
         logger.error("Ошибка выгрузки кураторов: %s", e)
         return False

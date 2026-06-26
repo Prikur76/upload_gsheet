@@ -1,9 +1,11 @@
 """Клиент API 1С:Элемент (водители и автомобили)."""
 
+import logging
 from typing import Any
 
 import polars as pl
 import requests
+from requests.adapters import HTTPAdapter
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -11,10 +13,36 @@ from tenacity import (
     wait_exponential,
 )
 
+from upload_gsheet.api.element_log import log_1c_request_error, set_request_context
+from upload_gsheet.config import (
+    ELEMENT_CONNECT_TIMEOUT,
+    ELEMENT_READ_TIMEOUT,
+)
 from upload_gsheet.formatters.drivers_cars import (
     format_date_string,
     remove_chars,
 )
+
+logger = logging.getLogger(__name__)
+
+_ELEMENT_TIMEOUT = (ELEMENT_CONNECT_TIMEOUT, ELEMENT_READ_TIMEOUT)
+
+
+def _build_1c_session() -> requests.Session:
+    """Сессия без повторов urllib3 — retry только через tenacity."""
+    session = requests.Session()
+    adapter = HTTPAdapter(max_retries=0)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
+_1C_SESSION = _build_1c_session()
+
+
+def get_1c_session() -> requests.Session:
+    """HTTP-сессия для запросов к 1С."""
+    return _1C_SESSION
 
 
 @retry(
@@ -28,11 +56,34 @@ from upload_gsheet.formatters.drivers_cars import (
     wait=wait_exponential(multiplier=1, min=2, max=30),
 )
 def _post_json(url: str, auth: tuple[str, str], json: dict) -> list:
-    with requests.post(
-        url=url, auth=auth, json=json, stream=True, timeout=(10, 60)
-    ) as resp:
-        resp.raise_for_status()
-        return resp.json()
+    set_request_context(
+        "POST",
+        url,
+        user=auth[0],
+        json_body=json,
+        timeout=_ELEMENT_TIMEOUT,
+    )
+    try:
+        with _1C_SESSION.post(
+            url=url,
+            auth=auth,
+            json=json,
+            stream=True,
+            timeout=_ELEMENT_TIMEOUT,
+        ) as resp:
+            resp.raise_for_status()
+            return resp.json()
+    except requests.exceptions.HTTPError as exc:
+        log_1c_request_error(
+            logger,
+            exc,
+            "POST",
+            url,
+            user=auth[0],
+            json_body=json,
+            timeout=_ELEMENT_TIMEOUT,
+        )
+        raise
 
 
 @retry(
@@ -48,15 +99,35 @@ def _post_json(url: str, auth: tuple[str, str], json: dict) -> list:
 def _get_json(
     url: str, auth: tuple[str, str], params: dict | None = None
 ) -> list:
-    with requests.get(
-        url=url,
-        params=params or {},
-        auth=auth,
-        stream=True,
-        timeout=(10, 60),
-    ) as resp:
-        resp.raise_for_status()
-        return resp.json()
+    query = params or {}
+    set_request_context(
+        "GET",
+        url,
+        user=auth[0],
+        params=query or None,
+        timeout=_ELEMENT_TIMEOUT,
+    )
+    try:
+        with _1C_SESSION.get(
+            url=url,
+            params=query,
+            auth=auth,
+            stream=True,
+            timeout=_ELEMENT_TIMEOUT,
+        ) as resp:
+            resp.raise_for_status()
+            return resp.json()
+    except requests.exceptions.HTTPError as exc:
+        log_1c_request_error(
+            logger,
+            exc,
+            "GET",
+            url,
+            user=auth[0],
+            params=query or None,
+            timeout=_ELEMENT_TIMEOUT,
+        )
+        raise
 
 
 class ElementClient:

@@ -11,6 +11,7 @@ from googleapiclient.errors import HttpError
 from tenacity import RetryError
 
 from upload_gsheet.api.element import ElementClient
+from upload_gsheet.api.element_log import log_last_request_error
 from upload_gsheet.config import (
     CARS_URL,
     DRIVERS_URL,
@@ -365,20 +366,19 @@ def run_drivers_and_cars_safe() -> bool:
         logger.error("Ошибка Google Sheets: %s", e)
         return False
     except RetryError as e:
-        orig = e.__cause__ or e
-        logger.error("Ошибка после повторных попыток: %s", orig)
+        orig = e.last_attempt.exception() if e.last_attempt else e
+        log_last_request_error(logger, orig)
         return False
-    except requests.exceptions.HTTPError as e:
-        logger.error("Ошибка HTTP: %s", e)
+    except requests.exceptions.HTTPError:
         return False
     except requests.exceptions.ChunkedEncodingError as e:
-        logger.error("Ошибка обработки пакета: %s", e)
+        log_last_request_error(logger, e)
         return False
     except requests.exceptions.Timeout as e:
-        logger.error("Timeout: %s", e)
+        log_last_request_error(logger, e)
         return False
     except requests.exceptions.ConnectionError as e:
-        logger.error("Ошибка соединения: %s", e)
+        log_last_request_error(logger, e)
         return False
     except Exception as e:
         logger.error("Неожиданная ошибка: %s", e)
